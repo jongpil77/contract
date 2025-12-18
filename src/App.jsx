@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 /**
- * 정비수가 자동체결 시스템 - 오류 수정 및 최적화 버전
+ * 정비수가 자동체결 시스템 - 데모 계정 추가 버전
  */
 
 // --- Constants & Test Data ---
@@ -15,6 +15,11 @@ const INITIAL_USERS = [
   { 
     id: 'u1', email: 'admin@axa.co.kr', password: 'admin', employeeId: 'admin', 
     name: '김관리', phone: '010-1234-5678', team: '보상부', role: 'ADMIN', 
+    isActive: true, mustChangePassword: false 
+  },
+  { 
+    id: 'u2', email: 'test@axa.co.kr', password: 'test', employeeId: 'test1234', 
+    name: '테스터', phone: '010-9999-9999', team: '테스트팀', role: 'USER', 
     isActive: true, mustChangePassword: false 
   }
 ];
@@ -179,6 +184,13 @@ export default function App() {
           <button type="submit" className="w-full bg-[#00008F] text-white py-4 rounded-xl font-bold hover:bg-[#000066]">로그인</button>
         </form>
         <button onClick={() => setPage('signup')} className="mt-8 text-sm font-bold text-blue-500 flex items-center justify-center gap-2 mx-auto">신규 회원 가입</button>
+        
+        {/* 데모 정보 표시 (테스트용) */}
+        <div className="mt-8 p-4 bg-slate-50 rounded-2xl text-left">
+          <p className="text-[10px] font-bold text-slate-400 mb-2">데모 계정 정보</p>
+          <p className="text-xs text-slate-600">ID: <span className="font-mono">test@axa.co.kr</span></p>
+          <p className="text-xs text-slate-600">PW: <span className="font-mono">test</span></p>
+        </div>
       </div>
     </div>
   );
@@ -200,7 +212,7 @@ export default function App() {
             <h3 className="text-xl font-black mb-8 flex items-center gap-3 text-[#00008F]"><Search /> 협력업체 조회</h3>
             <div className="flex gap-3 mb-10">
               <input type="text" value={searchNo} onChange={e => setSearchNo(e.target.value)} placeholder="사업자번호 10자리" className="flex-1 px-8 py-5 rounded-2xl border-2 border-blue-50 outline-none text-xl font-bold" />
-              <button onClick={() => { const v = VENDORS_DB[searchNo]; if(v) setFoundVendor(v); else alert('미등록 업체'); }} className="bg-[#00008F] text-white px-12 rounded-2xl font-black">조회</button>
+              <button onClick={() => { const v = VENDORS_DB[searchNo]; if(v) setFoundVendor(v); else alert('미등록 업체 (테스트용: 1234567890 또는 9876543210)'); }} className="bg-[#00008F] text-white px-12 rounded-2xl font-black">조회</button>
             </div>
             {foundVendor && (
               <div className="animate-in fade-in space-y-6">
