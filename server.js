@@ -1,33 +1,27 @@
+const express = require('express'); // 1. express를 먼저 가져와야 합니다.
 const cors = require('cors');
-const app = express();
-
-app.use(cors()); // 모든 도메인에서의 접속을 허용합니다.
-
-const express = require('express');
-const { Pool } = require('pg'); // Client 대신 Pool을 사용합니다 (여러 명 접속 대비)
+const { Pool } = require('pg');
 require('dotenv').config();
 
-const app = express();
+const app = express(); // 2. app 선언은 여기서 딱 한 번만!
 const port = 3000;
+
+// 미들웨어 설정
+app.use(cors()); // 모든 도메인 허용
+app.use(express.json()); // JSON 데이터 파싱
 
 // 1. 데이터베이스 연결 설정 (Pool 방식)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // Railway 연결 시 필수 설정
+    rejectUnauthorized: false // Railway 연결 시 필수
   }
 });
 
-// 2. 미들웨어 설정 (JSON 데이터를 다루기 위함)
-app.use(express.json());
-
-// 3. API 경로(Route) 만들기: 모든 멤버 목록 가져오기
+// 2. API 경로: 모든 멤버 목록 가져오기
 app.get('/api/members', async (req, res) => {
   try {
-    // DB에서 데이터 조회
     const result = await pool.query('SELECT * FROM members ORDER BY id ASC');
-    
-    // 브라우저에 결과 전송
     res.json({
       success: true,
       data: result.rows
@@ -38,7 +32,7 @@ app.get('/api/members', async (req, res) => {
   }
 });
 
-// 4. API 경로 만들기: 새로운 멤버 추가하기 (POST)
+// 3. API 경로: 새로운 멤버 추가하기 (POST)
 app.post('/api/members', async (req, res) => {
   const { name, email } = req.body;
   try {
@@ -55,7 +49,10 @@ app.post('/api/members', async (req, res) => {
   }
 });
 
-// 5. 서버 시작
+// 4. 서버 시작
 app.listen(port, () => {
   console.log(`🚀 서버가 실행 중입니다: http://localhost:${port}`);
 });
+
+// VS Code 에러 방지용 (필요 시 유지)
+// export {};
