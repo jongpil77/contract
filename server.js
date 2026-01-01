@@ -13,167 +13,189 @@ const upload = multer({ dest: '/tmp/uploads' });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 유틸리티: 사업자번호 검증
-function isValidBizNo(bizNo) {
-  if (!bizNo || !/^\d{10}$/.test(bizNo)) return false;
-  const d = bizNo.split('').map(Number);
-  const w = [1, 3, 7, 1, 3, 7, 1, 3, 5];
-  let tmp = 0;
-  for (let i = 0; i < 9; i++) tmp += d[i] * w[i];
-  tmp += Math.floor(d[8] * 5 / 10);
-  const check = (10 - (tmp % 10)) % 10;
-  return check === d[9];
+// --- [핵심] 1. 인메모리 DB (서버 재시작 시 초기화됨) ---
+const contractsDB = new Map();
+
+// --- 2. 유틸리티 함수 ---
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('ko-KR').format(amount || 0);
 }
 
-// 유틸리티: 파일명 안전 처리
-function sanitizeName(name) {
-  return String(name || '').replace(/[\/:*?"<>|]/g, '').trim();
-}
-
-// HTML 템플릿 생성
-function renderHtml({ vendorName, bizNo, periodFrom, periodTo, increaseRate, stampBase64 }) {
+// --- 3. HTML 동적 생성 함수 (파일 읽기 대신 사용) ---
+function generateContractHtml(contract) {
   return `<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>자동차 정비수가 계약서</title>
   <style>
-    body { font-family: "Noto Sans KR", Arial; margin: 24px; }
-    h1 { font-size: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th, td { border: 1px solid #999; padding: 8px; text-align: left; }
-    th { background: #f0f0f0; width: 120px; }
-    .stamp-container { margin-top: 20px; text-align: right; }
-    .stamp { width: 100px; height: 100px; object-fit: contain; vertical-align: middle; }
-    footer { margin-top: 30px; font-size: 12px; color: #666; text-align: center; }
+    body { font-family: "Noto Sans KR", Arial; margin: 0; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1 { text-align: center; border-bottom: 2px solid #333; pb-4 mb: 20px; font-size: 24px; }
+    .contract-info { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+    .contract-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+    .label { font-weight: bold; color: #555; }
+    .value { font-weight: bold; color: #00008F; }
+    .content { font-size: 14px; line-height: 1.6; margin-bottom: 30px; }
+    .article { margin-bottom: 15px; }
+    .article-title { font-weight: bold; display: block; margin-bottom: 4px; }
+    .stamp-area { text-align: center; margin-top: 30px; padding: 20px; border: 2px dashed #ccc; border-radius: 10px; cursor: pointer; position: relative; }
+    .stamp-area:hover { border-color: #00008F; background: #f0f7ff; }
+    input[type=file] { position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor: pointer; }
+    button { width: 100%; padding: 15px; background: #00008F; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+    button:disabled { background: #ccc; }
+    .helper { font-size: 12px; color: #888; text-align: center; margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h1>수가 계약서</h1>
-  <table>
-    <tr><th>업체명</th><td>${vendorName}</td></tr>
-    <tr><th>사업자번호</th><td>${bizNo}</td></tr>
-    <tr><th>계약기간</th><td>${periodFrom} ~ ${periodTo}</td></tr>
-    <tr><th>인상률</th><td>${increaseRate}%</td></tr>
-  </table>
-  <div class="stamp-container">
-    <span>(인)</span>
-    <img class="stamp" src="data:image/png;base64,${stampBase64}" alt="직인">
+  <div class="container">
+    <h1>자동차 정비수가 계약서</h1>
+    
+    <div class="contract-info">
+      <div class="contract-row"><span class="label">계약번호</span><span class="value">${contract.contractNo}</span></div>
+      <div class="contract-row"><span class="label">업체명</span><span class="value">${contract.vendorName}</span></div>
+      <div class="contract-row"><span class="label">사업자번호</span><span class="value">${contract.vendorId}</span></div>
+    </div>
+
+    <div class="content">
+      <div class="article">
+        <span class="article-title">제 1 조 (계약 금액)</span>
+        2026년도 시간당 공임 및 정비수가는 금 <strong>${formatCurrency(contract.amount)}원</strong>으로 한다.
+      </div>
+      <div class="article">
+        <span class="article-title">제 2 조 (계약 기간)</span>
+        본 계약의 기간은 <strong>${contract.periodStart}</strong> 부터 <strong>${contract.periodEnd}</strong> 까지로 한다.
+      </div>
+      <div class="article">
+        <span class="article-title">제 3 조 (성실의무)</span>
+        "을"(${contract.vendorName})은 "갑"(AXA손해보험)의 위탁 업무를 성실히 수행한다.
+      </div>
+    </div>
+
+    <form action="/sign/${contract.id}/complete" method="post" enctype="multipart/form-data">
+      <div class="stamp-area" id="stampArea">
+        <p>📋 여기를 눌러 직인/도장 이미지를 등록하세요</p>
+        <img id="preview" style="max-width:100px; display:none; margin:0 auto;">
+        <input type="file" name="stamp" accept="image/*" required onchange="previewStamp(this)">
+      </div>
+      
+      <div style="margin-top: 20px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" required id="agreeCheck">
+          <span style="font-size:14px; font-weight:bold;">위 계약 내용을 확인하였으며 체결에 동의합니다.</span>
+        </label>
+      </div>
+
+      <button type="submit" id="submitBtn">최종 서명 및 체결 완료</button>
+      <p class="helper">체결 즉시 PDF가 담당자 메일로 발송됩니다.</p>
+    </form>
   </div>
-  <footer>
-    본 문서는 전자적으로 생성되었습니다. (생성일시: ${new Date().toLocaleString('ko-KR')})
-  </footer>
+
+  <script>
+    function previewStamp(input) {
+      if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById('preview').src = e.target.result;
+          document.getElementById('preview').style.display = 'block';
+          document.querySelector('#stampArea p').style.display = 'none';
+        }
+        reader.readAsDataURL(input.files[0]);
+      }
+    }
+  </script>
 </body>
 </html>`;
 }
 
-// 메일 발송 함수
-async function sendMail(pdfPath, filename, meta) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTPHOST,
-    port: Number(process.env.SMTPPORT || 465),
-    secure: true, // 465 포트 사용 시 true
-    auth: {
-      user: process.env.SMTPUSER,
-      pass: process.env.SMTPPASS
-    }
-  });
+// --- 4. API 라우트 정의 ---
 
-  await transporter.sendMail({
-    from: process.env.FROMEMAIL,
-    to: process.env.TOEMAIL,
-    subject: `[CONTRACT] ${meta.bizNo} ${meta.vendorName}`,
-    text: `수가 계약서가 접수되었습니다.\n\n업체명: ${meta.vendorName}\n사업자번호: ${meta.bizNo}\n계약기간: ${meta.periodFrom} ~ ${meta.periodTo}\n인상률: ${meta.increaseRate}%`,
-    attachments: [{ filename, path: pdfPath }]
-  });
-}
+// [기본 경로] 서버 상태 확인용
+app.get('/', (req, res) => {
+  res.send('Contract PDF Server is Running (정상 작동 중)');
+});
 
-// n8n 감사로그 전송 (옵션)
-async function postN8nAudit(meta, pdfPath) {
-  if (!process.env.N8NWEBHOOKURL) return;
+// [직원용] 계약 생성 API
+app.post('/api/contracts', (req, res) => {
   try {
-    const pdfBase64 = (await fs.readFile(pdfPath)).toString('base64');
-    // Node.js 18+ 에서는 fetch 기본 지원
-    await fetch(process.env.N8NWEBHOOKURL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...meta, pdfBase64 })
-    });
-  } catch (e) {
-    console.warn('[AUDIT] n8n webhook 실패:', e.message);
-  }
-}
-
-// 라우트: 폼 페이지
-app.get('/', async (req, res) => {
-  try {
-    const html = await fs.readFile(path.join(__dirname, 'views', 'form.html'), 'utf8');
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
+    const contractData = req.body; 
+    contractsDB.set(contractData.id, contractData);
+    console.log(`[Contract Created] ${contractData.id}`);
+    res.json({ success: true });
   } catch (err) {
-    res.status(500).send('Form loading error');
+    res.status(500).json({ error: err.message });
   }
 });
 
-// 라우트: PDF 생성 및 처리
-app.post('/contracts/generate', upload.single('stamp'), async (req, res) => {
-  let htmlPath = null;
-  let pdfPath = null;
+// [협력업체용] 계약서 조회 (동적 HTML 생성)
+app.get('/sign/:id', (req, res) => {
+  const contract = contractsDB.get(req.params.id);
+  if (!contract) return res.status(404).send('<h1>유효하지 않은 계약 링크입니다.</h1>');
+  if (contract.status === 'COMPLETED') return res.send('<h1>이미 체결 완료된 계약입니다.</h1>');
+  
+  res.send(generateContractHtml(contract));
+});
+
+// [협력업체용] 최종 서명 및 PDF 발송
+app.post('/sign/:id/complete', upload.single('stamp'), async (req, res) => {
+  const contractId = req.params.id;
+  const contract = contractsDB.get(contractId);
+  let pdfPath = null, htmlPath = null;
+
+  if (!contract) return res.status(404).send('계약 정보 없음');
 
   try {
-    const { vendorName, periodFrom, periodTo, increaseRate } = req.body;
-    const bizNo = String(req.body.bizNo || '').replace(/\D/g, '');
+    const stampBase64 = req.file ? (await fs.readFile(req.file.path)).toString('base64') : '';
+    
+    // PDF용 HTML 생성
+    const finalHtml = generateContractHtml({ ...contract }).replace(
+      'id="preview" style="max-width:100px; display:none; margin:0 auto;">',
+      `src="data:image/png;base64,${stampBase64}" style="width:100px;">`
+    ).replace(/<input.*?>/g, '').replace(/<button.*?>.*?<\/button>/g, '');
 
-    // 1. 유효성 검사
-    if (!isValidBizNo(bizNo)) {
-      return res.status(400).send('<script>alert("유효하지 않은 사업자등록번호입니다."); history.back();</script>');
-    }
-    if (!req.file) {
-      return res.status(400).send('<script>alert("도장 이미지가 필요합니다."); history.back();</script>');
-    }
-
-    const stampBase64 = (await fs.readFile(req.file.path)).toString('base64');
-    const htmlContent = renderHtml({ vendorName, bizNo, periodFrom, periodTo, increaseRate, stampBase64 });
-
-    // 2. 임시 파일 경로 설정
     const uniqueId = Date.now();
     htmlPath = `/tmp/${uniqueId}.html`;
     pdfPath = `/tmp/${uniqueId}.pdf`;
-
-    // 3. HTML 저장 및 PDF 변환
-    await fs.writeFile(htmlPath, htmlContent, 'utf8');
+    
+    await fs.writeFile(htmlPath, finalHtml);
     
     await new Promise((resolve, reject) => {
       const wk = spawn('wkhtmltopdf', ['--encoding', 'utf-8', '--quiet', htmlPath, pdfPath]);
+      wk.on('close', (code) => code === 0 ? resolve() : reject(new Error('PDF 변환 실패')));
       wk.on('error', reject);
-      wk.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`wkhtmltopdf exited with code ${code}`))));
     });
 
-    // 4. 파일명 생성 (사업자번호_업체명_날짜.pdf)
-    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const filename = `${bizNo}_${sanitizeName(vendorName)}_${ymd}.pdf`;
+    const transporter = nodemailer.createTransport({
+        host: process.env.SMTPHOST,
+        port: Number(process.env.SMTPPORT || 465),
+        secure: true,
+        auth: { user: process.env.SMTPUSER, pass: process.env.SMTPPASS }
+    });
 
-    // 5. 메일 발송
-    await sendMail(pdfPath, filename, { vendorName, bizNo, periodFrom, periodTo, increaseRate });
+    await transporter.sendMail({
+      from: process.env.FROMEMAIL,
+      to: contract.creatorEmail || process.env.TOEMAIL,
+      subject: `[체결완료] ${contract.vendorName} - ${contract.contractNo}`,
+      text: '계약이 체결되었습니다. 첨부파일을 확인하세요.',
+      attachments: [{ filename: `${contract.contractNo}.pdf`, path: pdfPath }]
+    });
 
-    // 6. n8n 감사로그 (비동기 처리)
-    postN8nAudit({ vendorName, bizNo, periodFrom, periodTo, increaseRate, filename }, pdfPath);
-
-    res.send('<script>alert("계약서가 성공적으로 제출되었습니다."); window.location.href="/";</script>');
+    contract.status = 'COMPLETED';
+    contractsDB.set(contractId, contract);
+    res.send('<h1>계약 체결 완료!</h1><p>창을 닫으셔도 됩니다.</p>');
 
   } catch (err) {
     console.error(err);
-    res.status(500).send(`처리 중 오류가 발생했습니다: ${err.message}`);
+    res.status(500).send(`오류: ${err.message}`);
   } finally {
-    // 리소스 정리 (업로드 파일 및 임시 파일 삭제)
     try {
-        if (req.file) await fs.unlink(req.file.path).catch(() => {});
-        if (htmlPath) await fs.unlink(htmlPath).catch(() => {});
-        if (pdfPath) await fs.unlink(pdfPath).catch(() => {});
-    } catch (cleanupErr) {
-        console.error('Cleanup error:', cleanupErr);
-    }
+        if (req.file) await fs.unlink(req.file.path).catch(()=>{});
+        if (htmlPath) await fs.unlink(htmlPath).catch(()=>{});
+        if (pdfPath) await fs.unlink(pdfPath).catch(()=>{});
+    } catch {}
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Contract PDF Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Contract Server running on port ${PORT}`));
