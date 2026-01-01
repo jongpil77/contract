@@ -13,16 +13,19 @@ const upload = multer({ dest: '/tmp/uploads' });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- [핵심] 1. 인메모리 DB (서버 재시작 시 초기화됨) ---
+// [추가된 부분 1] React 빌드 결과물(정적 파일) 서빙 설정
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// --- 기존 로직 (DB 및 함수들) ---
 const contractsDB = new Map();
 
-// --- 2. 유틸리티 함수 ---
 function formatCurrency(amount) {
   return new Intl.NumberFormat('ko-KR').format(amount || 0);
 }
 
-// --- 3. HTML 동적 생성 함수 (파일 읽기 대신 사용) ---
 function generateContractHtml(contract) {
+  // ... (기존 HTML 생성 코드 그대로 유지 - 너무 길어서 생략, 이전 코드 쓰시면 됩니다) ...
+  // ★ 주의: 이 함수 내용은 이전 답변의 generateContractHtml 코드를 그대로 유지하세요.
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -109,14 +112,8 @@ function generateContractHtml(contract) {
 </html>`;
 }
 
-// --- 4. API 라우트 정의 ---
+// --- API 라우트 ---
 
-// [기본 경로] 서버 상태 확인용
-app.get('/', (req, res) => {
-  res.send('Contract PDF Server is Running (정상 작동 중)');
-});
-
-// [직원용] 계약 생성 API
 app.post('/api/contracts', (req, res) => {
   try {
     const contractData = req.body; 
@@ -128,17 +125,15 @@ app.post('/api/contracts', (req, res) => {
   }
 });
 
-// [협력업체용] 계약서 조회 (동적 HTML 생성)
 app.get('/sign/:id', (req, res) => {
   const contract = contractsDB.get(req.params.id);
   if (!contract) return res.status(404).send('<h1>유효하지 않은 계약 링크입니다.</h1>');
   if (contract.status === 'COMPLETED') return res.send('<h1>이미 체결 완료된 계약입니다.</h1>');
-  
   res.send(generateContractHtml(contract));
 });
 
-// [협력업체용] 최종 서명 및 PDF 발송
 app.post('/sign/:id/complete', upload.single('stamp'), async (req, res) => {
+  // ... (기존 PDF 생성 및 메일 발송 코드 그대로 유지) ...
   const contractId = req.params.id;
   const contract = contractsDB.get(contractId);
   let pdfPath = null, htmlPath = null;
@@ -197,5 +192,10 @@ app.post('/sign/:id/complete', upload.single('stamp'), async (req, res) => {
   }
 });
 
+// [추가된 부분 2] 위 API 경로 외의 모든 요청은 React 화면(index.html)으로 보냄
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Contract Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

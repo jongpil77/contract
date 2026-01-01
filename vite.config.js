@@ -3,10 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 4173,
-  },
   build: {
-    outDir: 'dist',
-  },
+    outDir: 'dist', // 빌드 결과물이 저장될 폴더 이름
+  }
 });
