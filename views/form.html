@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>수가 계약서 제출</title>
+<style>
+  body { font-family: "Noto Sans KR", Arial; margin: 0; padding: 20px; background: #f5f5f5; }
+  .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  h2 { margin-top: 0; color: #333; }
+  label { display: block; margin-top: 12px; font-weight: bold; font-size: 14px; }
+  input { width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+  button { width: 100%; margin-top: 20px; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+  button:hover { background: #0056b3; }
+  .helper { color: #666; font-size: 12px; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h2>수가 계약서 제출</h2>
+    <form action="/contracts/generate" method="post" enctype="multipart/form-data">
+      <label>업체명
+        <input type="text" name="vendorName" placeholder="예: (주)대한의료" required>
+      </label>
+      
+      <label>사업자등록번호 (숫자 10자리)
+        <input type="text" name="bizNo" pattern="\d{10}" placeholder="0000000000" required>
+      </label>
+      
+      <label>계약시작일
+        <input type="date" name="periodFrom" required>
+      </label>
+      
+      <label>계약종료일
+        <input type="date" name="periodTo" required>
+      </label>
+      
+      <label>인상률 (%)
+        <input type="number" name="increaseRate" step="0.1" min="0" max="100" placeholder="예: 2.5" required>
+      </label>
+      
+      <label>직인/도장 이미지 (PNG/JPG)
+        <input type="file" name="stamp" accept="image/png,image/jpeg" required>
+      </label>
+      <p class="helper">* 제출 시 [사업자번호_업체명_날짜.pdf]로 변환되어 담당자에게 전송됩니다.</p>
+      
+      <button type="submit">계약서 제출하기</button>
+    </form>
+  </div>
+</body>
+</html>
