@@ -4,20 +4,19 @@ import {
   Settings, FileSpreadsheet, PlusCircle, Trash2, ShieldCheck, X, 
   Calendar, FileText, PlayCircle, ChevronDown, ShieldAlert, Printer, 
   MapPin, Building2, User, UserPlus, Lock, LayoutDashboard, FileUp,
-  AlertTriangle, Calculator, UserCog, Ban
+  AlertTriangle, Calculator, UserCog, Ban, Send
 } from 'lucide-react';
 
 /**
- * 정비수가 모바일 계약 체결 시스템 - V9.0 (Final Complete)
- * - 관리자 권한 분리 (admin@axa.co.kr만 인상률 수정)
- * - 상태 표시 UI 개선 (애니메이션, 위치 변경)
- * - 원 단위 절사
- * - 전국 지역 데이터 반영
+ * 정비수가 모바일 계약 체결 시스템 - V10.0 (Final UI/UX Upgrade)
+ * - 업체 검색 결과 가시성 강화 (빨간색 사업자번호)
+ * - 계약 목록 [보내기] 버튼 추가 및 상태 표시 개선
+ * - 관리자 설정 메뉴 통합 (DB/템플릿 업로드)
  */
 
 const SERVER_URL = "https://contract-axa.up.railway.app"; 
 
-// --- 1. 지역 데이터 (전국 시군구 전체 반영) ---
+// --- 1. 지역 데이터 ---
 const REGIONS_DATA = {
   "서울특별시": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
   "부산광역시": ["강서구", "금정구", "기장군", "남구", "동구", "동래구", "부산진구", "북구", "사상구", "사하구", "서구", "수영구", "연제구", "영도구", "중구", "해운대구"],
@@ -131,13 +130,13 @@ export default function App() {
 
   // Modals
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [settingsTab, setSettingsTab] = useState('user'); // default to user
+  const [settingsTab, setSettingsTab] = useState('user'); 
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showLimitWarningModal, setShowLimitWarningModal] = useState(false);
   const [showFinalConfirmModal, setShowFinalConfirmModal] = useState(false);
 
-  // --- 초기화: 연도별 인상률 자동 생성 ---
+  // --- 초기화 ---
   useEffect(() => {
     const currentYear = new Date().getFullYear();
     const newRates = { ...rates };
@@ -158,8 +157,7 @@ export default function App() {
     const targetUser = users.find(u => u.email === loginEmail && u.password === loginPw);
     if (targetUser) {
       setUser(targetUser);
-      // 관리자면 시스템 설정 탭 기본값, 아니면 유저 탭
-      setSettingsTab(targetUser.email === 'admin@axa.co.kr' ? 'system' : 'user');
+      setSettingsTab(targetUser.role === 'ADMIN' ? 'system' : 'user');
       setPage('dashboard');
     } else {
       alert('이메일 또는 비밀번호가 올바르지 않습니다.');
@@ -205,6 +203,24 @@ export default function App() {
     }
   };
 
+  const handleExcelUpload = (e) => {
+    const file = e.target.files[0];
+    if(file) {
+      setTimeout(() => {
+        alert('업체 데이터베이스가 갱신되었습니다.');
+        setShowExcelModal(false);
+      }, 1000);
+    }
+  };
+
+  const handleTemplateUpload = (e) => {
+    const file = e.target.files[0];
+    if(file) {
+      alert('계약서 템플릿(PDF)이 등록되었습니다.');
+      setShowTemplateModal(false);
+    }
+  };
+
   // --- Handlers: Contract Logic ---
   const calculateLimit = (vendor) => {
     const lastYear = new Date(vendor.lastContractDate).getFullYear();
@@ -217,8 +233,7 @@ export default function App() {
       else accumulatedRate += rate;
     }
 
-    // [수정] 원 단위 절사 (소수점 제거)
-    const limit = Math.floor(baseAmount * accumulatedRate); 
+    const limit = Math.floor(baseAmount * accumulatedRate); // 원단위 절사
     
     setLimitDetail({ 
       base: baseAmount, 
@@ -290,7 +305,6 @@ export default function App() {
   };
 
   const handleSearchRegionName = () => {
-    // 최소한 지역 또는 업체명 중 하나는 있어야 함
     if(!searchProvince && !searchName) return alert('지역 또는 업체명을 입력해주세요.');
     const results = Object.values(vendors).filter(v => {
       const prov = searchProvince ? v.address.includes(searchProvince) : true;
@@ -327,18 +341,6 @@ export default function App() {
     const link = `${SERVER_URL}/sign/${currentContract.id}`;
     navigator.clipboard.writeText(`[AXA손해보험] ${currentContract.vendorName}님, 계약 체결 부탁드립니다.\n${link}`);
     alert('링크가 복사되었습니다.');
-  };
-
-  const handleExcelUpload = (e) => {
-    const file = e.target.files[0];
-    if(file) {
-      setTimeout(() => {
-        // 더미 데이터 추가
-        setVendors(prev => ({...prev, '9999888877': {id:'9999888877', name:'(주)신규 모터스', ceoName:'김신규', address:'서울 강남구', lastContractDate:'2024-12-01', lastContractAmount:45000}}));
-        alert('업로드 완료');
-        setShowExcelModal(false);
-      }, 1000);
-    }
   };
 
   // --- UI Renders ---
@@ -411,6 +413,7 @@ export default function App() {
         </header>
 
         <main className="max-w-3xl mx-auto p-6 space-y-6">
+          {/* 통계 카드 */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 text-center">
               <p className="text-xs text-slate-400 font-bold mb-1">전체 계약</p>
@@ -460,13 +463,19 @@ export default function App() {
               </div>
             )}
 
+            {/* [업체 검색 결과 개선] */}
             {searchResults.length > 0 && !foundVendor && (
               <div className="mb-6 space-y-2">
                 {searchResults.map(v=>(
-                  <div key={v.id} onClick={()=>selectVendor(v)} className="p-4 border rounded-xl hover:bg-slate-50 cursor-pointer">
-                    <p className="font-bold">{v.name}</p>
-                    <p className="text-xs text-slate-500">{v.address}</p>
-                    <p className="text-xs text-[#00008F] mt-1">기존 수가: {formatCurrency(v.lastContractAmount)}원</p>
+                  <div key={v.id} onClick={()=>selectVendor(v)} className="p-4 border rounded-xl hover:bg-slate-50 cursor-pointer bg-white">
+                    <div className="flex justify-between items-center mb-1">
+                      <p className="font-bold text-lg text-slate-800">{v.name}</p>
+                      <p className="font-bold text-red-500">{formatBizNo(v.id)}</p>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-1">
+                      대표: <span className="font-bold">{v.ceoName}</span> / 최종 계약 체결일 : {v.lastContractDate}
+                    </p>
+                    <p className="text-xs text-slate-400">{v.address}</p>
                   </div>
                 ))}
               </div>
@@ -476,10 +485,13 @@ export default function App() {
               <div className="space-y-4 animate-in slide-in-from-top-2">
                 <div className="bg-[#F0F7FF] p-5 rounded-2xl border border-blue-100 relative">
                   <button onClick={()=>setFoundVendor(null)} className="absolute top-4 right-4 text-xs text-blue-400 underline">다시 검색</button>
-                  <p className="text-lg font-black text-[#00008F]">{foundVendor.name}</p>
-                  <p className="text-sm text-slate-600 mb-1">{foundVendor.ceoName} | {formatBizNo(foundVendor.id)}</p>
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="text-lg font-black text-[#00008F]">{foundVendor.name}</p>
+                    <p className="font-bold text-red-500 text-sm">{formatBizNo(foundVendor.id)}</p>
+                  </div>
+                  <p className="text-sm text-slate-600 mb-2">대표: {foundVendor.ceoName} / 최종: {foundVendor.lastContractDate}</p>
                   
-                  {/* [시각화 개선] 산출 내역 */}
+                  {/* 산출 내역 시각화 */}
                   <div className="mt-3 bg-white p-4 rounded-xl border border-blue-200 shadow-sm">
                     <p className="text-xs text-slate-400 font-bold mb-2">한도 산출 내역 (인상률 {limitDetail.rateStr}%)</p>
                     <div className="flex items-center justify-between text-sm font-medium">
@@ -528,8 +540,9 @@ export default function App() {
                     <p className="text-xs text-slate-500 mb-2">{c.contractNo}</p>
                   </div>
                   
-                  {/* [UI 개선] 상태 표시 좌측 배치 + 삭제 버튼 */}
+                  {/* [상태표시 및 버튼 개선] */}
                   <div className="flex items-center gap-2">
+                    {/* 상태 뱃지 (좌측 배치) */}
                     <span className={`flex items-center gap-1 text-[10px] px-3 py-1.5 rounded-full font-bold shadow-sm ${
                       c.status==='COMPLETED' 
                       ? 'bg-emerald-100 text-emerald-600' 
@@ -538,9 +551,18 @@ export default function App() {
                       {c.status==='COMPLETED' ? <CheckCircle2 size={12}/> : <Clock size={12}/>}
                       {c.status==='COMPLETED' ? '완료' : '진행중'}
                     </span>
-                    <button onClick={()=>{setCurrentContract(c); setPage('contract-view');}} className="px-4 py-2 bg-blue-50 text-[#00008F] rounded-xl text-xs font-bold hover:bg-[#00008F] hover:text-white transition-colors">
+
+                    <button onClick={()=>{setCurrentContract(c); setPage('contract-view');}} className="px-3 py-2 bg-blue-50 text-[#00008F] rounded-xl text-xs font-bold hover:bg-[#00008F] hover:text-white transition-colors">
                       VIEW
                     </button>
+
+                    {/* 보내기 버튼 (진행중일 때만) */}
+                    {c.status === 'PENDING' && (
+                      <button onClick={() => { setCurrentContract(c); setPage('send-view'); }} className="px-3 py-2 bg-[#00008F] text-white rounded-xl text-xs font-bold flex items-center gap-1 hover:bg-[#000066] transition-colors">
+                        <Send size={12} /> 보내기
+                      </button>
+                    )}
+
                     <button onClick={()=>handleDeleteContract(c.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
                       <Trash2 size={18}/>
                     </button>
@@ -573,7 +595,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 설정 모달 (권한 분리) */}
+        {/* 설정 모달 (권한 분리 + 템플릿/DB 업로드 추가) */}
         {showSettingsModal && (
           <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 max-h-[80vh] overflow-y-auto">
@@ -583,26 +605,43 @@ export default function App() {
                </div>
                
                <div className="flex border-b mb-6">
-                 {/* 관리자만 시스템 설정 탭 보임 */}
                  {user?.role === 'ADMIN' && (
                    <button onClick={()=>setSettingsTab('system')} className={`flex-1 py-2 font-bold text-sm ${settingsTab==='system'?'text-[#00008F] border-b-2 border-[#00008F]':'text-slate-400'}`}>시스템 설정</button>
                  )}
                  <button onClick={()=>setSettingsTab('user')} className={`flex-1 py-2 font-bold text-sm ${settingsTab==='user'?'text-[#00008F] border-b-2 border-[#00008F]':'text-slate-400'}`}>내 정보 설정</button>
                </div>
 
+               {/* 관리자: 시스템 설정 탭 (인상률 + 업로드) */}
                {settingsTab === 'system' && user?.role === 'ADMIN' && (
-                 <div className="space-y-4">
-                   <div className="bg-slate-50 p-3 rounded-xl flex gap-2">
-                     <button onClick={()=>setCalcMethod('simple')} className={`flex-1 py-2 rounded-lg text-xs font-bold ${calcMethod==='simple'?'bg-white shadow text-[#00008F]':'text-slate-400'}`}>단리 적용</button>
-                     <button onClick={()=>setCalcMethod('compound')} className={`flex-1 py-2 rounded-lg text-xs font-bold ${calcMethod==='compound'?'bg-white shadow text-[#00008F]':'text-slate-400'}`}>복리 적용</button>
+                 <div className="space-y-6">
+                   {/* 업로드 메뉴 통합 */}
+                   <div className="space-y-3">
+                     <p className="text-xs font-bold text-slate-500">데이터 관리</p>
+                     <button onClick={()=>setShowExcelModal(true)} className="w-full py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border border-emerald-100">
+                       <FileSpreadsheet size={16}/> 업체 계약 DB 업로드 (Excel)
+                     </button>
+                     <button onClick={()=>setShowTemplateModal(true)} className="w-full py-3 bg-blue-50 text-blue-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border border-blue-100">
+                       <FileText size={16}/> 계약서 템플릿 업로드 (PDF)
+                     </button>
                    </div>
-                   <div className="space-y-2 max-h-40 overflow-y-auto">
-                     {Object.keys(rates).sort().map(y => (
-                       <div key={y} className="flex justify-between p-2 bg-slate-50 rounded-lg text-sm">
-                         <span>{y}년</span>
-                         <div className="flex items-center gap-1"><input type="number" step="0.1" value={rates[y]} onChange={(e)=>setRates({...rates, [y]:parseFloat(e.target.value)})} className="w-14 text-right bg-white rounded border p-1"/>%</div>
-                       </div>
-                     ))}
+
+                   <hr className="border-slate-100"/>
+
+                   {/* 인상률 관리 */}
+                   <div className="space-y-4">
+                     <p className="text-xs font-bold text-slate-500">연도별 인상률 설정</p>
+                     <div className="bg-slate-50 p-3 rounded-xl flex gap-2">
+                       <button onClick={()=>setCalcMethod('simple')} className={`flex-1 py-2 rounded-lg text-xs font-bold ${calcMethod==='simple'?'bg-white shadow text-[#00008F]':'text-slate-400'}`}>단리 적용</button>
+                       <button onClick={()=>setCalcMethod('compound')} className={`flex-1 py-2 rounded-lg text-xs font-bold ${calcMethod==='compound'?'bg-white shadow text-[#00008F]':'text-slate-400'}`}>복리 적용</button>
+                     </div>
+                     <div className="space-y-2 max-h-40 overflow-y-auto">
+                       {Object.keys(rates).sort().map(y => (
+                         <div key={y} className="flex justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                           <span>{y}년</span>
+                           <div className="flex items-center gap-1"><input type="number" step="0.1" value={rates[y]} onChange={(e)=>setRates({...rates, [y]:parseFloat(e.target.value)})} className="w-14 text-right bg-white rounded border p-1"/>%</div>
+                         </div>
+                       ))}
+                     </div>
                    </div>
                  </div>
                )}
@@ -620,6 +659,36 @@ export default function App() {
                    </button>
                  </div>
                )}
+            </div>
+          </div>
+        )}
+
+        {/* 엑셀 업로드 모달 */}
+        {showExcelModal && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-3xl p-8 text-center">
+               <FileSpreadsheet size={48} className="mx-auto text-emerald-600 mb-4"/>
+               <h3 className="font-bold text-lg mb-2">업체 DB 엑셀 업로드</h3>
+               <label className="block w-full py-4 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-50 mb-4">
+                 <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleExcelUpload}/>
+                 <span className="text-sm font-bold text-slate-400">파일 선택 (.xlsx)</span>
+               </label>
+               <button onClick={() => setShowExcelModal(false)} className="text-sm text-slate-400 underline">취소</button>
+            </div>
+          </div>
+        )}
+
+        {/* 템플릿 업로드 모달 */}
+        {showTemplateModal && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-3xl p-8 text-center">
+               <FileText size={48} className="mx-auto text-blue-600 mb-4"/>
+               <h3 className="font-bold text-lg mb-2">계약서 템플릿 업로드</h3>
+               <label className="block w-full py-4 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-50 mb-4">
+                 <input type="file" accept=".pdf" className="hidden" onChange={handleTemplateUpload}/>
+                 <span className="text-sm font-bold text-slate-400">PDF 파일 선택</span>
+               </label>
+               <button onClick={() => setShowTemplateModal(false)} className="text-sm text-slate-400 underline">취소</button>
             </div>
           </div>
         )}
@@ -641,15 +710,6 @@ export default function App() {
           <p><strong>계약기간:</strong> {currentContract.periodStart} ~ {currentContract.periodEnd}</p>
           <p className="mt-8 text-slate-400 text-center">[ 이하 표준 계약서 내용 ]</p>
         </div>
-        
-        {/* 발송 버튼 추가 */}
-        {currentContract.status === 'PENDING' && (
-          <div className="mt-8 pt-4 border-t">
-            <button onClick={()=>setPage('send-view')} className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold flex justify-center gap-2">
-              <Printer size={18}/> 계약서 발송 및 서명 요청
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -671,7 +731,7 @@ export default function App() {
     </div>
   );
 
-  // --- Vendor Flow Pages (Login, Sign, Success) ---
+  // --- Vendor Pages ---
   const renderVendorLogin = () => (
     <div className="min-h-screen bg-[#F0F7FF] flex items-center justify-center p-6">
       <div className="bg-white w-full max-w-md p-8 rounded-[2rem] shadow-xl text-center">
@@ -679,10 +739,7 @@ export default function App() {
         <h3 className="font-bold text-lg mt-6 mb-2">전자계약 본인인증</h3>
         <p className="text-xs text-slate-500 mb-6">사업자등록번호를 입력해주세요.</p>
         <input value={vendorAuth.bizNo} onChange={e=>setVendorAuth({bizNo:e.target.value})} placeholder="사업자번호 (숫자만)" className="w-full p-4 border rounded-xl mb-4 outline-none"/>
-        <button onClick={()=>{
-          if(vendorAuth.bizNo === currentContract.vendorId) setPage('vendor-sign');
-          else alert('사업자번호 불일치');
-        }} className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold">인증하기</button>
+        <button onClick={handleVendorLogin} className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold">인증하기</button>
       </div>
     </div>
   );
