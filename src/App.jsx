@@ -3,23 +3,36 @@ import {
   Search, Copy, QrCode, LogOut, CheckCircle2, Upload, History, Mail, 
   Settings, FileSpreadsheet, PlusCircle, Trash2, ShieldCheck, X, 
   Calendar, FileText, PlayCircle, ChevronDown, ShieldAlert, Printer, 
-  MapPin, Building2, User
+  MapPin, Building2, User, UserPlus, Lock, LayoutDashboard
 } from 'lucide-react';
 
 /**
- * 정비수가 모바일 계약 체결 시스템 - V4.0 (서버 연동 최종 완성)
+ * 정비수가 모바일 계약 체결 시스템 - V6.0
+ * - 서버 주소 반영
+ * - 부서명 콤보박스
+ * - 계약번호 커스텀 생성 (연도-부서-이름-번호)
  */
 
 // =================================================================
-// [중요] 여기에 Railway에서 생성된 서버 주소를 입력하세요 (끝에 / 제외)
-// 예: "https://contract-server-production.up.railway.app"
-const SERVER_URL = "https://contract-axa.up.railway.app/"; 
+// [반영 완료] Railway 서버 주소
+const SERVER_URL = "https://contract-axa.up.railway.app"; 
 // =================================================================
 
+// 부서 목록 상수
+const TEAM_LIST = [
+  "서울보상부", "경인보상부", "중부보상부", "남부보상부", "스마트보상부", "특수보상부"
+];
+
+// 초기 데이터
 const INITIAL_RATES = {
   2018: 2.1, 2019: 2.4, 2020: 2.0, 2021: 2.5, 
   2022: 2.9, 2023: 3.0, 2024: 2.5, 2025: 2.6, 2026: 2.7
 };
+
+// 데모용 초기 사용자
+const INITIAL_USERS = [
+  { email: 'admin@axa.co.kr', password: 'admin', name: '김관리', team: '스마트보상부' }
+];
 
 const INITIAL_VENDORS = {
   '1234567890': {
@@ -38,6 +51,13 @@ const INITIAL_VENDORS = {
     lastContractPeriod: '2024-12-01 ~ 2025-11-30',
     lastContractAmount: 85000000
   }
+};
+
+const REGIONS_DATA = {
+  "서울특별시": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
+  "부산광역시": ["강서구", "금정구", "남구", "동래구", "북구", "사하구", "서구", "수영구", "연제구", "영도구", "중구", "해운대구"],
+  "경기도": ["고양시", "남양주시", "부천시", "성남시", "수원시", "안산시", "안양시", "용인시", "화성시"],
+  // ... 필요 시 추가
 };
 
 // 유틸리티
@@ -59,63 +79,88 @@ const AxaLogo = ({ size = "normal" }) => (
 
 export default function App() {
   const [page, setPage] = useState('login'); 
-  const [userEmail, setUserEmail] = useState(''); 
+  const [user, setUser] = useState(null); 
+  const [users, setUsers] = useState(INITIAL_USERS);
+
   const [vendors, setVendors] = useState(INITIAL_VENDORS);
   const [rates, setRates] = useState(INITIAL_RATES);
   const [contracts, setContracts] = useState([]);
 
-  // Auth
-  const [loginStep, setLoginStep] = useState('email'); 
-  const [inputEmail, setInputEmail] = useState('');
-  const [serverCode, setServerCode] = useState(null); 
-  const [inputCode, setInputCode] = useState('');
-  const [inputPw, setInputPw] = useState('');
-  
-  // Dashboard
-  const [showRateModal, setShowRateModal] = useState(false);
-  const [showExcelModal, setShowExcelModal] = useState(false);
-  
-  // Search
+  // Auth States
+  const [authMode, setAuthMode] = useState('login'); 
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPw, setLoginPw] = useState('');
+
+  const [signupStep, setSignupStep] = useState(1);
+  const [signupForm, setSignupForm] = useState({ email: '', code: '', name: '', team: '', password: '' });
+  const [serverCode, setServerCode] = useState(null);
+
+  // Search & Dashboard States
   const [searchTab, setSearchTab] = useState('bizNo'); 
   const [searchBizNo, setSearchBizNo] = useState('');
-  const [searchRegion, setSearchRegion] = useState(''); 
+  const [searchProvince, setSearchProvince] = useState('');
+  const [searchDistrict, setSearchDistrict] = useState('');
   const [searchName, setSearchName] = useState('');   
   const [searchResults, setSearchResults] = useState([]); 
   const [foundVendor, setFoundVendor] = useState(null); 
   
-  // Forms
   const [contractForm, setContractForm] = useState({ amount: '', startDate: '', endDate: '' });
   const [currentContract, setCurrentContract] = useState(null);
   const [showQRSection, setShowQRSection] = useState(false);
+  const [showRateModal, setShowRateModal] = useState(false);
+  const [showExcelModal, setShowExcelModal] = useState(false);
 
-  // --- Handlers: Login ---
-  const requestVerificationCode = (e) => {
+  // --- Handlers: Auth ---
+  const handleLogin = (e) => {
     e.preventDefault();
-    if(!inputEmail.includes('@') || !inputEmail.includes('.')) return alert('유효한 이메일 형식이 아닙니다.');
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setServerCode(code);
-    alert(`[메일 발송됨]\n인증번호: ${code}\n\n(실제로는 이메일로 발송됩니다)`);
-    setLoginStep('verify');
+    const targetUser = users.find(u => u.email === loginEmail && u.password === loginPw);
+    if (targetUser) {
+      setUser(targetUser);
+      setPage('dashboard');
+    } else {
+      alert('이메일 또는 비밀번호가 올바르지 않습니다.');
+    }
   };
 
-  const verifyCode = (e) => {
-    e.preventDefault();
-    if(inputCode === serverCode) {
-      alert('인증되었습니다. 비밀번호를 입력해주세요.');
-      setLoginStep('password');
+  const requestSignupCode = () => {
+    if(!signupForm.email.includes('@')) return alert('유효한 이메일을 입력하세요.');
+    if(users.some(u => u.email === signupForm.email)) return alert('이미 가입된 이메일입니다.');
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setServerCode(code);
+    alert(`[인증번호 발송됨]\n\n인증번호: ${code}\n\n(테스트용: 팝업확인)`);
+    setSignupStep(2);
+  };
+
+  const verifySignupCode = () => {
+    if(signupForm.code === serverCode) {
+      alert('인증되었습니다. 회원 정보를 입력해주세요.');
+      setSignupStep(3);
     } else {
       alert('인증번호가 일치하지 않습니다.');
     }
   };
 
-  const handleLogin = (e) => {
+  const completeSignup = (e) => {
     e.preventDefault();
-    if(inputPw.length < 6) return alert('비밀번호는 6자리 이상이어야 합니다.');
-    setUserEmail(inputEmail);
-    setPage('dashboard');
+    if(signupForm.password.length < 6) return alert('비밀번호는 6자리 이상이어야 합니다.');
+    if(!signupForm.team) return alert('부서를 선택해주세요.');
+    
+    const newUser = {
+      email: signupForm.email,
+      password: signupForm.password,
+      name: signupForm.name,
+      team: signupForm.team
+    };
+    
+    setUsers([...users, newUser]);
+    alert('회원가입이 완료되었습니다! 로그인해주세요.');
+    setAuthMode('login');
+    setSignupStep(1);
+    setSignupForm({ email: '', code: '', name: '', team: '', password: '' });
   };
 
-  // --- Handlers: Search ---
+  // --- Handlers: Search & Contract ---
   const handleSearchBizNo = () => {
     const v = vendors[searchBizNo];
     if(v) selectVendor(v);
@@ -123,11 +168,12 @@ export default function App() {
   };
 
   const handleSearchRegionName = () => {
-    if(!searchRegion && !searchName) return alert('검색 조건을 입력해주세요.');
+    if(!searchProvince && !searchName) return alert('검색 조건(지역 또는 업체명)을 입력해주세요.');
     const results = Object.values(vendors).filter(v => {
-      const regionMatch = searchRegion ? v.address.includes(searchRegion) : true;
+      const provinceMatch = searchProvince ? v.address.includes(searchProvince) : true;
+      const districtMatch = searchDistrict ? v.address.includes(searchDistrict) : true;
       const nameMatch = searchName ? v.name.includes(searchName) : true;
-      return regionMatch && nameMatch;
+      return provinceMatch && districtMatch && nameMatch;
     });
     setSearchResults(results);
     if(results.length === 0) alert('검색 결과가 없습니다.');
@@ -136,18 +182,62 @@ export default function App() {
   const selectVendor = (v) => {
     setFoundVendor(v);
     setSearchResults([]); 
-    
     const thisYearRate = rates[2026] || 2.7;
     const calcAmount = Math.floor((v.lastContractAmount * (1 + thisYearRate / 100)) / 10) * 10;
-    
     const todayStr = new Date().toISOString().split('T')[0];
     const endYearStr = `${new Date().getFullYear()}-12-31`;
+    setContractForm({ amount: toCommaString(calcAmount), startDate: todayStr, endDate: endYearStr });
+  };
 
-    setContractForm({
-      amount: toCommaString(calcAmount),
-      startDate: todayStr,
-      endDate: endYearStr
-    });
+  const createContract = async () => {
+    if(!contractForm.amount || !contractForm.startDate || !contractForm.endDate) return alert('모든 필수 정보를 입력해주세요.');
+    
+    // [수정됨] 계약번호 생성 규칙: 연도-부서-이름-일련번호
+    const year = new Date().getFullYear();
+    const seq = (contracts.length + 1).toString().padStart(4, '0');
+    // 공백 제거 등 안전하게 처리
+    const safeTeam = user.team.replace(/\s+/g, '');
+    const safeName = user.name.replace(/\s+/g, '');
+    const contractNo = `${year}-${safeTeam}-${safeName}-${seq}`;
+
+    const newContract = {
+      id: `C${Date.now()}`,
+      contractNo: contractNo, // 수정된 번호 적용
+      vendorId: foundVendor.id, 
+      vendorName: foundVendor.name,
+      ceoName: foundVendor.ceoName,
+      address: foundVendor.address,
+      amount: fromCommaString(contractForm.amount),
+      periodStart: contractForm.startDate,
+      periodEnd: contractForm.endDate,
+      status: 'PENDING',
+      creatorEmail: user.email,
+      creatorName: user.name,
+      creatorTeam: user.team,
+      createdAt: new Date().toLocaleString()
+    };
+    
+    try {
+      const res = await fetch(`${SERVER_URL}/api/contracts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newContract)
+      });
+      if(!res.ok) throw new Error('서버 통신 실패');
+      setContracts([newContract, ...contracts]);
+      setFoundVendor(null);
+      setSearchBizNo(''); setSearchProvince(''); setSearchDistrict(''); setSearchName('');
+      alert(`계약서가 생성되었습니다.\n번호: ${contractNo}`);
+    } catch (err) {
+      console.error(err);
+      alert(`계약 생성 실패: ${err.message}`);
+    }
+  };
+
+  const copyLinkWithMsg = () => {
+    const link = `${SERVER_URL}/sign/${currentContract.id}`;
+    navigator.clipboard.writeText(`[AXA손해보험] ${currentContract.vendorName}님, 2026년 정비수가 계약 체결을 부탁드립니다.\n\n▶ 계약서 확인 및 서명하기:\n${link}`);
+    alert('메시지 내용이 복사되었습니다.');
   };
 
   const handleExcelUpload = (e) => {
@@ -171,99 +261,99 @@ export default function App() {
     }
   };
 
-  // --- [핵심] 계약 생성 및 서버 전송 ---
-  const createContract = async () => {
-    if(!contractForm.amount || !contractForm.startDate || !contractForm.endDate) return alert('모든 필수 정보를 입력해주세요.');
-    
-    // 서버 URL 확인
-    if(SERVER_URL.includes("여기에")) return alert("App.jsx 파일 상단에 SERVER_URL을 설정해주세요!");
-
-    const newContract = {
-      id: `C${Date.now()}`,
-      contractNo: `2026-AXA-${(contracts.length+1).toString().padStart(4,'0')}`,
-      vendorId: foundVendor.id, 
-      vendorName: foundVendor.name,
-      ceoName: foundVendor.ceoName,
-      address: foundVendor.address,
-      amount: fromCommaString(contractForm.amount),
-      periodStart: contractForm.startDate,
-      periodEnd: contractForm.endDate,
-      status: 'PENDING',
-      creatorEmail: userEmail,
-      createdAt: new Date().toLocaleString()
-    };
-    
-    try {
-      // 1. 서버에 계약 정보 전송
-      const res = await fetch(`${SERVER_URL}/api/contracts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newContract)
-      });
-
-      if(!res.ok) throw new Error('서버 통신 실패');
-
-      // 2. 로컬 상태 업데이트
-      setContracts([newContract, ...contracts]);
-      setFoundVendor(null);
-      setSearchBizNo(''); setSearchRegion(''); setSearchName('');
-      alert('계약서가 생성되었습니다. 목록에서 링크를 전송하세요.');
-
-    } catch (err) {
-      console.error(err);
-      alert(`계약 생성 실패: ${err.message}\n서버 주소를 확인해주세요.`);
-    }
-  };
-
-  const copyLinkWithMsg = () => {
-    if(SERVER_URL.includes("여기에")) return alert("App.jsx 파일 상단에 SERVER_URL을 설정해주세요!");
-    
-    // 실제 서버의 계약서 서명 페이지 링크 생성
-    const link = `${SERVER_URL}/sign/${currentContract.id}`;
-    
-    navigator.clipboard.writeText(`[AXA손해보험] ${currentContract.vendorName}님, 2026년 정비수가 계약 체결을 부탁드립니다.\n\n▶ 계약서 확인 및 서명하기:\n${link}`);
-    alert('메시지 내용이 복사되었습니다.\n협력업체 담당자에게 전송하세요.');
-  };
-
   // --- UI Renders ---
 
-  const renderLogin = () => (
+  const renderAuth = () => (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F7FF] p-6 font-sans">
       <div className="w-full max-w-md bg-white rounded-[2rem] shadow-xl p-8 border border-blue-50">
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
           <AxaLogo size="large" />
-          <p className="text-slate-500 mt-2 text-sm">직원 전용 로그인</p>
+          <p className="text-slate-500 mt-2 text-sm">
+            {authMode === 'login' ? '직원 전용 로그인' : '신규 직원 회원가입'}
+          </p>
         </div>
 
-        {loginStep === 'email' && (
-          <form onSubmit={requestVerificationCode} className="space-y-4">
+        {authMode === 'login' && (
+          <form onSubmit={handleLogin} className="space-y-4 animate-in fade-in">
             <div>
-              <label className="block text-sm font-bold text-[#00008F] mb-1">직원 이메일</label>
-              <input type="email" value={inputEmail} onChange={e => setInputEmail(e.target.value)} placeholder="axa@axa.co.kr" className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none focus:border-[#00008F]" required/>
+              <label className="block text-sm font-bold text-[#00008F] mb-1">이메일</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 text-slate-400" size={20}/>
+                <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@axa.co.kr" className="w-full pl-10 pr-4 py-3 rounded-xl border bg-slate-50 outline-none focus:border-[#00008F]" required/>
+              </div>
             </div>
-            <button type="submit" className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold text-lg hover:bg-[#000066]">인증번호 받기</button>
-          </form>
-        )}
-
-        {loginStep === 'verify' && (
-          <form onSubmit={verifyCode} className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-[#00008F] mb-1">인증번호 입력</label>
-              <input type="text" value={inputCode} onChange={e => setInputCode(e.target.value)} placeholder="6자리 숫자" maxLength={6} className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none text-center tracking-widest text-lg font-bold" required/>
-            </div>
-            <button type="submit" className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold text-lg">인증 확인</button>
-          </form>
-        )}
-
-        {loginStep === 'password' && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="text-center mb-4"><span className="bg-blue-100 text-[#00008F] px-3 py-1 rounded-full text-xs font-bold">{inputEmail}</span></div>
             <div>
               <label className="block text-sm font-bold text-[#00008F] mb-1">비밀번호</label>
-              <input type="password" value={inputPw} onChange={e => setInputPw(e.target.value)} placeholder="6자리 이상 입력" minLength={6} className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none" required/>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 text-slate-400" size={20}/>
+                <input type="password" value={loginPw} onChange={e => setLoginPw(e.target.value)} placeholder="비밀번호 입력" className="w-full pl-10 pr-4 py-3 rounded-xl border bg-slate-50 outline-none focus:border-[#00008F]" required/>
+              </div>
             </div>
-            <button type="submit" className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold text-lg">로그인</button>
+            <button type="submit" className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold text-lg hover:bg-[#000066]">로그인</button>
+            <div className="pt-4 text-center">
+              <button type="button" onClick={() => setAuthMode('signup')} className="text-sm text-slate-500 hover:text-[#00008F] underline">계정이 없으신가요? 회원가입</button>
+            </div>
+            <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 text-center">
+              <p className="text-xs font-bold text-[#00008F] mb-2 flex items-center justify-center gap-1"><ShieldCheck size={14}/> 테스트용 데모 계정</p>
+              <div className="text-xs text-slate-600 space-y-1">
+                <p>아이디: <span className="font-mono font-bold select-all">admin@axa.co.kr</span></p>
+                <p>비밀번호: <span className="font-mono font-bold select-all">admin</span></p>
+              </div>
+            </div>
           </form>
+        )}
+
+        {authMode === 'signup' && (
+          <div className="space-y-4 animate-in slide-in-from-right-10">
+            {signupStep === 1 && (
+              <div className="space-y-4">
+                 <div>
+                  <label className="block text-sm font-bold text-[#00008F] mb-1">가입할 이메일</label>
+                  <input type="email" value={signupForm.email} onChange={e => setSignupForm({...signupForm, email: e.target.value})} placeholder="example@axa.co.kr" className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none" />
+                </div>
+                <button onClick={requestSignupCode} className="w-full py-3 bg-[#00008F] text-white rounded-xl font-bold">인증번호 받기</button>
+              </div>
+            )}
+            {signupStep === 2 && (
+              <div className="space-y-4">
+                 <div className="text-center mb-2"><span className="text-sm bg-blue-100 text-[#00008F] px-3 py-1 rounded-full">{signupForm.email}</span></div>
+                 <div>
+                  <label className="block text-sm font-bold text-[#00008F] mb-1">인증번호 6자리</label>
+                  <input type="text" maxLength={6} value={signupForm.code} onChange={e => setSignupForm({...signupForm, code: e.target.value})} placeholder="123456" className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none text-center tracking-widest font-bold" />
+                </div>
+                <button onClick={verifySignupCode} className="w-full py-3 bg-[#00008F] text-white rounded-xl font-bold">인증 확인</button>
+              </div>
+            )}
+            {signupStep === 3 && (
+              <form onSubmit={completeSignup} className="space-y-3">
+                 <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">이름</label>
+                  <input required value={signupForm.name} onChange={e => setSignupForm({...signupForm, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none"/>
+                 </div>
+                 
+                 {/* [수정됨] 부서 선택 콤보박스 */}
+                 <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">부서/팀</label>
+                  <div className="relative">
+                    <select required value={signupForm.team} onChange={e => setSignupForm({...signupForm, team: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none appearance-none">
+                      <option value="">부서를 선택하세요</option>
+                      {TEAM_LIST.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={16}/>
+                  </div>
+                 </div>
+
+                 <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">비밀번호 (6자리 이상)</label>
+                  <input required type="password" minLength={6} value={signupForm.password} onChange={e => setSignupForm({...signupForm, password: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none"/>
+                 </div>
+                 <button type="submit" className="w-full py-4 bg-[#00008F] text-white rounded-xl font-bold mt-2">가입 완료</button>
+              </form>
+            )}
+            <div className="pt-2 text-center">
+              <button type="button" onClick={() => { setAuthMode('login'); setSignupStep(1); }} className="text-sm text-slate-500 hover:text-[#00008F] underline">로그인 화면으로 돌아가기</button>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -274,6 +364,10 @@ export default function App() {
       <header className="bg-white border-b px-6 py-4 flex justify-between items-center sticky top-0 z-30">
         <AxaLogo />
         <div className="flex gap-2">
+          <div className="hidden sm:block text-right mr-2">
+            <p className="text-xs font-bold text-[#00008F]">{user?.name} 님</p>
+            <p className="text-[10px] text-slate-500">{user?.team}</p>
+          </div>
           <button onClick={() => setShowRateModal(true)} className="p-2 bg-slate-100 rounded-full text-slate-600"><Settings size={20}/></button>
           <button onClick={() => setPage('login')} className="p-2 bg-slate-100 rounded-full text-slate-600"><LogOut size={20}/></button>
         </div>
@@ -305,12 +399,21 @@ export default function App() {
           )}
 
           {searchTab === 'regionName' && (
-            <div className="space-y-3 mb-6">
+            <div className="space-y-3 mb-6 animate-in fade-in">
               <div className="flex gap-2">
-                <div className="w-1/3"><input value={searchRegion} onChange={e => setSearchRegion(e.target.value)} placeholder="지역 (시/군/구)" className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none text-sm"/></div>
-                <div className="flex-1"><input value={searchName} onChange={e => setSearchName(e.target.value)} placeholder="업체명 (일부 일치)" className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none text-sm font-bold"/></div>
+                <select value={searchProvince} onChange={e => { setSearchProvince(e.target.value); setSearchDistrict(''); }} className="w-1/3 px-4 py-3 rounded-xl border bg-slate-50 outline-none text-sm appearance-none">
+                  <option value="">시/도 선택</option>
+                  {Object.keys(REGIONS_DATA).map(province => (<option key={province} value={province}>{province}</option>))}
+                </select>
+                <select value={searchDistrict} onChange={e => setSearchDistrict(e.target.value)} className="w-1/3 px-4 py-3 rounded-xl border bg-slate-50 outline-none text-sm appearance-none" disabled={!searchProvince}>
+                  <option value="">전체 (시/군/구)</option>
+                  {searchProvince && REGIONS_DATA[searchProvince]?.map(district => (<option key={district} value={district}>{district}</option>))}
+                </select>
               </div>
-              <button onClick={handleSearchRegionName} className="w-full py-3 bg-[#00008F] text-white rounded-xl font-bold">검색</button>
+              <div className="flex gap-2">
+                <input value={searchName} onChange={e => setSearchName(e.target.value)} placeholder="업체명 (선택 입력)" className="flex-1 px-4 py-3 rounded-xl border bg-slate-50 outline-none text-sm font-bold"/>
+                <button onClick={handleSearchRegionName} className="w-24 bg-[#00008F] text-white rounded-xl font-bold">검색</button>
+              </div>
             </div>
           )}
 
@@ -327,7 +430,7 @@ export default function App() {
           )}
 
           {foundVendor && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-in slide-in-from-top-2">
               <div className="bg-[#F0F7FF] p-5 rounded-2xl border border-blue-100 relative">
                 <button onClick={() => setFoundVendor(null)} className="absolute top-4 right-4 text-xs text-blue-400 underline">다시 검색</button>
                 <p className="text-lg font-black text-[#00008F]">{foundVendor.name}</p>
@@ -359,21 +462,24 @@ export default function App() {
           )}
         </section>
 
+        {/* [수정됨] 계약 체결 현황 목록 */}
         <section className="space-y-4">
-          <h3 className="font-bold text-slate-700 ml-2">진행 중인 계약</h3>
+          <h3 className="font-bold text-slate-700 ml-2 flex items-center gap-2"><LayoutDashboard size={18}/> 계약 체결 현황</h3>
           {contracts.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-slate-100">생성된 계약이 없습니다.</div>
           ) : (
             contracts.map(c => (
-              <div key={c.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                <div>
+              <div key={c.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center group hover:border-[#00008F] transition-all">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${c.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                      {c.status === 'COMPLETED' ? '체결 완료' : '대기중'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{c.contractNo}</span>
+                  </div>
                   <p className="font-bold text-slate-800">{c.vendorName}</p>
-                  <p className="text-xs text-slate-500">{c.contractNo}</p>
-                  <span className={`text-[10px] px-2 py-0.5 rounded ${c.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                    {c.status === 'COMPLETED' ? '체결 완료' : '서명 대기'}
-                  </span>
                 </div>
-                <button onClick={() => { setCurrentContract(c); setPage('contract-view'); }} className="p-2 bg-blue-50 text-[#00008F] rounded-lg">
+                <button onClick={() => { setCurrentContract(c); setPage('contract-view'); }} className="p-2 bg-blue-50 text-[#00008F] rounded-lg opacity-80 group-hover:opacity-100">
                   <ChevronDown size={20}/>
                 </button>
               </div>
@@ -382,6 +488,7 @@ export default function App() {
         </section>
       </main>
 
+      {/* 모달들 (생략 - 기존과 동일) */}
       {showRateModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-3xl p-6 max-h-[80vh] overflow-y-auto">
@@ -457,8 +564,8 @@ export default function App() {
     </div>
   );
 
-  if(page === 'login') return renderLogin();
+  if(page === 'login') return renderAuth();
   if(page === 'dashboard') return renderDashboard();
   if(page === 'contract-view') return renderContractView();
-  return renderLogin();
+  return renderAuth();
 }
