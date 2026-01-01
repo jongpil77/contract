@@ -1,4 +1,5 @@
-FROM ghcr.io/surnet/alpine-node-wkhtmltopdf:18.16.0-0.12.6-small
+# 기존 18.16.0 태그가 없어져서, 존재하는 최신 Node 20 버전으로 변경
+FROM ghcr.io/surnet/alpine-node-wkhtmltopdf:20.15.1-0.12.6-small
 
 # 한글 폰트 설치 (Noto Sans KR)
 RUN apk add --no-cache fontconfig ttf-dejavu wget && \
