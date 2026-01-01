@@ -1,10 +1,10 @@
-# 기존 18.16.0 태그가 없어져서, 존재하는 최신 Node 20 버전으로 변경
+# Node 20 + wkhtmltopdf 베이스 이미지
 FROM ghcr.io/surnet/alpine-node-wkhtmltopdf:20.15.1-0.12.6-small
 
-# 한글 폰트 설치 (Noto Sans KR)
+# 한글 폰트 설치 (URL 수정됨: NotoSansKR-Regular.ttf)
 RUN apk add --no-cache fontconfig ttf-dejavu wget && \
     mkdir -p /usr/share/fonts/noto && \
-    wget -O /usr/share/fonts/noto/NotoSansKR-Regular.otf https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Korean/NotoSansKR-Regular.otf && \
+    wget -O /usr/share/fonts/noto/NotoSansKR-Regular.ttf https://github.com/google/fonts/raw/main/ofl/notosanskr/NotoSansKR-Regular.ttf && \
     fc-cache -fv
 
 WORKDIR /app
